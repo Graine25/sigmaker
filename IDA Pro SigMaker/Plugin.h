@@ -13,6 +13,4 @@ struct plugin_ctx_t : public plugmod_t {
 	virtual bool idaapi run( size_t ) override;
 };
 
-static plugmod_t* idaapi init( ) {
-	return new plugin_ctx_t;
-}
+plugmod_t* idaapi init( );

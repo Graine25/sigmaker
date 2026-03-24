@@ -1,10 +1,19 @@
 #include "Utils.h"
 
+#include <cstdio>
+#include <cstring>
+
+#if defined(_WIN32)
+#define NOMINMAX
+#include <Windows.h>
+#endif
+
 bool SetClipboardText( std::string_view text ) {
 	if( text.empty( ) ) {
 		return false;
 	}
 
+#if defined(_WIN32)
 	if( OpenClipboard( NULL ) == false || EmptyClipboard( ) == false ) {
 		return false;
 	}
@@ -33,6 +42,18 @@ bool SetClipboardText( std::string_view text ) {
 	}
 
 	return true;
+#elif defined(__APPLE__)
+	FILE* pipe = popen( "pbcopy", "w" );
+	if( pipe == nullptr ) {
+		return false;
+	}
+
+	const auto bytesWritten = fwrite( text.data( ), 1, text.size( ), pipe );
+	const auto closeResult = pclose( pipe );
+	return bytesWritten == text.size( ) && closeResult == 0;
+#else
+	return false;
+#endif
 }
 
 bool GetRegexMatches( std::string string, std::regex regex, std::vector<std::string>& matches ) {
@@ -41,7 +62,6 @@ bool GetRegexMatches( std::string string, std::regex regex, std::vector<std::str
 
 	matches.clear( );
 
-	size_t i = 0;
 	while( iter != end ) {
 		matches.push_back( iter->str( ) );
 		++iter;

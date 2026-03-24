@@ -3,7 +3,10 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros">
     <IDAPRO_PATH>C:\Program Files\IDA 7.0</IDAPRO_PATH>
-    <IDAPRO_SDK_PATH>$(IDAPRO_PATH)\idasdk70</IDAPRO_SDK_PATH>
+    <IDASDK Condition="'$(IDASDK)'==''">$([System.Environment]::GetEnvironmentVariable('IDASDK'))</IDASDK>
+    <IDAPRO_SDK_PATH Condition="'$(IDASDK)'!='' and Exists('$(IDASDK)\include\ida.hpp')">$(IDASDK)</IDAPRO_SDK_PATH>
+    <IDAPRO_SDK_PATH Condition="'$(IDASDK)'!='' and '$(IDAPRO_SDK_PATH)'=='' and Exists('$(IDASDK)\src\include\ida.hpp')">$(IDASDK)\src</IDAPRO_SDK_PATH>
+    <IDAPRO_SDK_PATH Condition="'$(IDAPRO_SDK_PATH)'==''">$(IDAPRO_PATH)\idasdk70</IDAPRO_SDK_PATH>
   </PropertyGroup>
   <PropertyGroup />
   <ItemDefinitionGroup />
@@ -13,6 +16,9 @@
     </BuildMacro>
     <BuildMacro Include="IDAPRO_SDK_PATH">
       <Value>$(IDAPRO_SDK_PATH)</Value>
+    </BuildMacro>
+    <BuildMacro Include="IDASDK">
+      <Value>$(IDASDK)</Value>
     </BuildMacro>
   </ItemGroup>
 </Project>

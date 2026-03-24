@@ -1,5 +1,15 @@
 #include "SignatureUtils.h"
 
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
+
+static std::string FormatHexByte( uint8_t value ) {
+	std::ostringstream stream;
+	stream << std::uppercase << std::hex << std::setw( 2 ) << std::setfill( '0' ) << static_cast<int>( value );
+	return stream.str( );
+}
+
 std::string BuildIDASignatureString( const Signature& signature, bool doubleQM ) {
 	std::ostringstream result;
 	// Build hex pattern
@@ -8,7 +18,7 @@ std::string BuildIDASignatureString( const Signature& signature, bool doubleQM )
 			result << ( doubleQM ? "??" : "?" );
 		}
 		else {
-			result << std::format( "{:02X}", byte.value );
+			result << FormatHexByte( byte.value );
 		}
 		result << " ";
 	}
@@ -25,7 +35,7 @@ std::string BuildByteArrayWithMaskSignatureString( const Signature& signature ) 
 	std::ostringstream mask;
 	// Build hex pattern
 	for( const auto& byte : signature ) {
-		pattern << "\\x" << std::format( "{:02X}", ( byte.isWildcard ? 0 : byte.value ) );
+		pattern << "\\x" << FormatHexByte( byte.isWildcard ? 0 : byte.value );
 		mask << ( byte.isWildcard ? "?" : "x" );
 	}
 	auto str = pattern.str( ) + " " + mask.str( );
@@ -37,7 +47,7 @@ std::string BuildBytesWithBitmaskSignatureString( const Signature& signature ) {
 	std::ostringstream mask;
 	// Build hex pattern
 	for( const auto& byte : signature ) {
-		pattern << "0x" << std::format( "{:02X}", ( byte.isWildcard ? 0 : byte.value ) ) << ", ";
+		pattern << "0x" << FormatHexByte( byte.isWildcard ? 0 : byte.value ) << ", ";
 		mask << ( byte.isWildcard ? "0" : "1" );
 	}
 	auto patternStr = pattern.str( );

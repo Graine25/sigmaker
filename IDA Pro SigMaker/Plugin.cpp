@@ -1,7 +1,11 @@
 #include "Plugin.h"
 #include "Version.h"
 
-plugin_t PLUGIN = {
+plugmod_t* idaapi init( ) {
+	return new plugin_ctx_t;
+}
+
+extern "C" plugin_t PLUGIN = {
 	IDP_INTERFACE_VERSION,
 	PLUGIN_MULTI,
 	init,

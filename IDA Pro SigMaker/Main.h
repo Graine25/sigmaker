@@ -1,12 +1,8 @@
 #pragma once
-#define NOMINMAX
-#include <Windows.h>
-#include <expected>
+#include <cstdint>
 #include <string>
-#include <sstream>
-#include <format>
+#include <utility>
 #include <vector>
-
 
 #include "Version.h"
 #include "Plugin.h"
@@ -25,3 +21,31 @@ typedef struct {
 } SignatureByte;
 
 using Signature = std::vector<SignatureByte>;
+
+struct SignatureResult {
+	bool ok = false;
+	Signature signature;
+	std::string errorMessage;
+
+	SignatureResult( ) = default;
+	SignatureResult( Signature value ) : ok( true ), signature( std::move( value ) ) {
+	}
+	SignatureResult( std::string error ) : ok( false ), errorMessage( std::move( error ) ) {
+	}
+
+	bool has_value( ) const {
+		return ok;
+	}
+
+	const Signature& value( ) const {
+		return signature;
+	}
+
+	Signature& value( ) {
+		return signature;
+	}
+
+	const std::string& error( ) const {
+		return errorMessage;
+	}
+};

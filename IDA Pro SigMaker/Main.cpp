@@ -84,7 +84,7 @@ static std::vector<ea_t> FindSignatureOccurences( std::string_view idaSignature,
 	auto ea = inf_get_min_ea( );
 	while ( true )
 	{
-		auto occurrence = bin_search3( ea, inf_get_max_ea( ), binaryPattern, BIN_SEARCH_NOCASE | BIN_SEARCH_FORWARD );
+		auto occurrence = bin_search( ea, inf_get_max_ea( ), binaryPattern, BIN_SEARCH_NOCASE | BIN_SEARCH_FORWARD );
 
 		if ( occurrence == BADADDR )
 		{
@@ -108,13 +108,13 @@ static bool IsSignatureUnique( std::string_view idaSignature ) {
 	return FindSignatureOccurences( idaSignature, true ).size( ) == 1;
 }
 
-static std::expected<Signature, std::string> GenerateUniqueSignatureForEA( ea_t ea, bool wildcardOperands, bool continueOutsideOfFunction, uint32_t operandTypeBitmask, size_t maxSignatureLength = 1000, bool askLongerSignature = true ) {
+static SignatureResult GenerateUniqueSignatureForEA( ea_t ea, bool wildcardOperands, bool continueOutsideOfFunction, uint32_t operandTypeBitmask, size_t maxSignatureLength = 1000, bool askLongerSignature = true ) {
 	if( ea == BADADDR ) {
-		return std::unexpected( "Invalid address" );
+		return SignatureResult{ std::string( "Invalid address" ) };
 	}
 
 	if( !is_code( get_flags( ea ) ) ) {
-		return std::unexpected( "Can not create code signature for data" );
+		return SignatureResult{ std::string( "Can not create code signature for data" ) };
 	}
 
 	Signature signature;
@@ -124,44 +124,44 @@ static std::expected<Signature, std::string> GenerateUniqueSignatureForEA( ea_t 
 
 	auto currentAddress = ea;
 	while( true ) {
-		// Handle IDA "cancel" event
+			// Handle IDA "cancel" event
 		if( user_cancelled( ) ) {
-			return std::unexpected( "Aborted" );
+			return SignatureResult{ std::string( "Aborted" ) };
 		}
 
 		insn_t instruction;
 		auto currentInstructionLength = decode_insn( &instruction, currentAddress );
-		if( currentInstructionLength <= 0 ) {
-			if( signature.empty( ) ) {
-				return std::unexpected( "Failed to decode first instruction" );
-			}
+			if( currentInstructionLength <= 0 ) {
+				if( signature.empty( ) ) {
+					return SignatureResult{ std::string( "Failed to decode first instruction" ) };
+				}
 
-			msg( "Signature reached end of executable code @ %I64X\n", currentAddress );
+			msg( "Signature reached end of executable code @ %llX\n", static_cast<unsigned long long>( currentAddress ) );
 			auto signatureString = BuildIDASignatureString( signature );
-			msg( "NOT UNIQUE Signature for %I64X: %s\n", ea, signatureString.c_str( ) );
-			return std::unexpected( "Signature not unique" );
-		}
+			msg( "NOT UNIQUE Signature for %llX: %s\n", static_cast<unsigned long long>( ea ), signatureString.c_str( ) );
+				return SignatureResult{ std::string( "Signature not unique" ) };
+			}
 
 		// Length check in case the signature becomes too long
 		if( sigPartLength > maxSignatureLength ) {
 			if( askLongerSignature ) {
-				auto result = ask_yn( ASKBTN_YES, "Signature is already at %llu bytes. Continue?", signature.size( ) );
+				auto result = ask_yn( ASKBTN_YES, "Signature is already at %zu bytes. Continue?", signature.size( ) );
 				if( result == 1 ) { // Yes 
 					sigPartLength = 0;
 				}
 				else if( result == 0 ) { // No
 					// Print the signature we have so far, even though its not unique
 					auto signatureString = BuildIDASignatureString( signature );
-					msg( "NOT UNIQUE Signature for %I64X: %s\n", ea, signatureString.c_str( ) );
-					return std::unexpected( "Signature not unique" );
+					msg( "NOT UNIQUE Signature for %llX: %s\n", static_cast<unsigned long long>( ea ), signatureString.c_str( ) );
+						return SignatureResult{ std::string( "Signature not unique" ) };
+					}
+					else { // Cancel
+						return SignatureResult{ std::string( "Aborted" ) };
+					}
 				}
-				else { // Cancel
-					return std::unexpected( "Aborted" );
+				else {
+					return SignatureResult{ std::string( "Signature exceeded maximum length" ) };
 				}
-			}
-			else {
-				return std::unexpected( "Signature exceeded maximum length" );
-			}
 		}
 		sigPartLength += currentInstructionLength;
 
@@ -187,27 +187,26 @@ static std::expected<Signature, std::string> GenerateUniqueSignatureForEA( ea_t 
 			TrimSignature( signature );
 
 			// Return the signature we generated
-			return signature;
-		}
+				return signature;
+			}
 		currentAddress += currentInstructionLength;
 
 		// Break if we leave function
-		if( !continueOutsideOfFunction && currentFunction && get_func( currentAddress ) != currentFunction ) {
-			return std::unexpected( "Signature left function scope" );
-		}
+			if( !continueOutsideOfFunction && currentFunction && get_func( currentAddress ) != currentFunction ) {
+				return SignatureResult{ std::string( "Signature left function scope" ) };
+			}
 
-	}
-	return std::unexpected( "Unknown" );
+		}
+	return SignatureResult{ std::string( "Unknown" ) };
 }
 
 // Function for code selection
-static std::expected<Signature, std::string> GenerateSignatureForEARange( ea_t eaStart, ea_t eaEnd, bool wildcardOperands, uint32_t operandTypeBitmask ) {
+static SignatureResult GenerateSignatureForEARange( ea_t eaStart, ea_t eaEnd, bool wildcardOperands, uint32_t operandTypeBitmask ) {
 	if( eaStart == BADADDR || eaEnd == BADADDR ) {
-		return std::unexpected( "Invalid address" );
+		return SignatureResult{ std::string( "Invalid address" ) };
 	}
 
 	Signature signature;
-	size_t sigPartLength = 0;
 
 	// Copy data section, no wildcards
 	if( !is_code( get_flags( eaStart ) ) ) {
@@ -217,19 +216,19 @@ static std::expected<Signature, std::string> GenerateSignatureForEARange( ea_t e
 
 	auto currentAddress = eaStart;
 	while( true ) {
-		// Handle IDA "cancel" event
+			// Handle IDA "cancel" event
 		if( user_cancelled( ) ) {
-			return std::unexpected( "Aborted" );
+			return SignatureResult{ std::string( "Aborted" ) };
 		}
 
 		insn_t instruction;
 		auto currentInstructionLength = decode_insn( &instruction, currentAddress );
-		if( currentInstructionLength <= 0 ) {
-			if( signature.empty( ) ) {
-				return std::unexpected( "Failed to decode first instruction" );
-			}
+			if( currentInstructionLength <= 0 ) {
+				if( signature.empty( ) ) {
+					return SignatureResult{ std::string( "Failed to decode first instruction" ) };
+				}
 
-			msg( "Signature reached end of executable code @ %I64X\n", currentAddress );
+			msg( "Signature reached end of executable code @ %llX\n", static_cast<unsigned long long>( currentAddress ) );
 			// If we have some bytes left, add them
 			if( currentAddress < eaEnd ) {
 				AddBytesToSignature( signature, currentAddress, eaEnd - currentAddress, false );
@@ -238,9 +237,7 @@ static std::expected<Signature, std::string> GenerateSignatureForEARange( ea_t e
 			return signature;
 		}
 
-		sigPartLength += currentInstructionLength;
-
-		uint8_t operandOffset = 0, operandLength = 0;
+			uint8_t operandOffset = 0, operandLength = 0;
 		if( wildcardOperands && GetOperand( instruction, &operandOffset, &operandLength, operandTypeBitmask ) && operandLength > 0 ) {
 			// Add opcodes
 			AddBytesToSignature( signature, currentAddress, operandOffset, false );
@@ -263,16 +260,16 @@ static std::expected<Signature, std::string> GenerateSignatureForEARange( ea_t e
 			return signature;
 		}
 	}
-	return std::unexpected( "Unknown" );
+	return SignatureResult{ std::string( "Unknown" ) };
 }
 
-void PrintSignatureForEA( const std::expected<Signature, std::string>& signature, ea_t ea, SignatureType sigType ) {
+void PrintSignatureForEA( const SignatureResult& signature, ea_t ea, SignatureType sigType ) {
 	if( !signature.has_value( ) ) {
 		msg( "Error: %s\n", signature.error( ).c_str( ) );
 		return;
 	}
 	const auto signatureStr = FormatSignature( signature.value( ), sigType );
-	msg( "Signature for %I64X: %s\n", ea, signatureStr.c_str( ) );
+	msg( "Signature for %llX: %s\n", static_cast<unsigned long long>( ea ), signatureStr.c_str( ) );
 	if( !SetClipboardText( signatureStr ) ) {
 		msg( "Failed to copy to clipboard!" );
 	}
@@ -305,7 +302,7 @@ static void FindXRefs( ea_t ea, bool wildcardOperands, bool continueOutsideOfFun
 			continue;
 		}
 
-		replace_wait_box( "Processing xref %llu of %llu (%0.1f%%)...\n\nSuitable Signatures: %llu\nShortest Signature: %llu Bytes", i + 1, xrefCount, ( static_cast<float>( i ) / xrefCount ) * 100.0f, xrefSignatures.size( ), ( shortestSignatureLength <= maxSignatureLength ? shortestSignatureLength : 0 ) );
+		replace_wait_box( "Processing xref %zu of %zu (%0.1f%%)...\n\nSuitable Signatures: %zu\nShortest Signature: %zu Bytes", i + 1, xrefCount, ( static_cast<float>( i ) / xrefCount ) * 100.0f, xrefSignatures.size( ), ( shortestSignatureLength <= maxSignatureLength ? shortestSignatureLength : 0 ) );
 
 		// Genreate signature for xref
 		auto signature = GenerateUniqueSignatureForEA( xref.from, wildcardOperands, continueOutsideOfFunction, operandTypeBitmask, maxSignatureLength, false );
@@ -332,11 +329,11 @@ static void PrintXRefSignaturesForEA( ea_t ea, const std::vector<std::tuple<ea_t
 	}
 
 	auto topLength = std::min( topCount, xrefSignatures.size( ) );
-	msg( "Top %llu Signatures out of %llu xrefs for %I64X:\n", topLength, xrefSignatures.size( ), ea );
+	msg( "Top %zu Signatures out of %zu xrefs for %llX:\n", topLength, xrefSignatures.size( ), static_cast<unsigned long long>( ea ) );
 	for( size_t i = 0; i < topLength; i++ ) {
 		const auto& [originAddress, signature] = xrefSignatures[i];
 		const auto signatureStr = FormatSignature( signature, sigType );
-		msg( "XREF Signature #%i @ %I64X: %s\n", i + 1, originAddress, signatureStr.c_str( ) );
+		msg( "XREF Signature #%zu @ %llX: %s\n", i + 1, static_cast<unsigned long long>( originAddress ), signatureStr.c_str( ) );
 
 		// Copy first signature only
 		if( i == 0 ) {
@@ -346,7 +343,6 @@ static void PrintXRefSignaturesForEA( ea_t ea, const std::vector<std::tuple<ea_t
 }
 
 static void PrintSelectedCode( ea_t start, ea_t end, SignatureType sigType, bool wildcardOperands, uint32_t operandBitmask ) {
-	const auto selectionSize = end - start;
 	// Create signature of fixed size from selection
 
 	auto signature = GenerateSignatureForEARange( start, end, wildcardOperands, operandBitmask );
@@ -356,7 +352,7 @@ static void PrintSelectedCode( ea_t start, ea_t end, SignatureType sigType, bool
 	}
 
 	const auto signatureStr = FormatSignature( signature.value( ), sigType );
-	msg( "Code for %I64X-%I64X: %s\n", start, end, signatureStr.c_str( ) );
+	msg( "Code for %llX-%llX: %s\n", static_cast<unsigned long long>( start ), static_cast<unsigned long long>( end ), signatureStr.c_str( ) );
 	SetClipboardText( signatureStr );
 }
 
@@ -388,20 +384,20 @@ static void SearchSignatureString( std::string input ) {
 		std::vector<std::string> rawByteStrings;
 		// Search for \x00\x11\x22 type arrays
 		if( GetRegexMatches( input, std::regex( R"(\\x(?:[0-9A-F]{2}))" ), rawByteStrings ) && rawByteStrings.size( ) == stringMask.length( ) ) {
-			Signature convertedSignature;
-			for( size_t i = 0; const auto & m : rawByteStrings ) {
-				SignatureByte b{ std::stoi( m.substr( 2 ), nullptr, 16 ), stringMask[i++] == '?' };
-				convertedSignature.push_back( b );
-			}
+				Signature convertedSignature;
+				for( size_t i = 0; const auto & m : rawByteStrings ) {
+					SignatureByte b{ static_cast<uint8_t>( std::stoi( m.substr( 2 ), nullptr, 16 ) ), stringMask[i++] == '?' };
+					convertedSignature.push_back( b );
+				}
 			convertedSignatureString = BuildIDASignatureString( convertedSignature );
 		}
 		// Search for 0x00, 0x11, 0x22 type arrays
 		else if( GetRegexMatches( input, std::regex( R"((?:0x(?:[0-9A-F]{2}))+)" ), rawByteStrings ) && rawByteStrings.size( ) == stringMask.length( ) ) {
-			Signature convertedSignature;
-			for( size_t i = 0; const auto & m : rawByteStrings ) {
-				SignatureByte b{ std::stoi( m.substr( 2 ), nullptr, 16 ), stringMask[i++] == '?' };
-				convertedSignature.push_back( b );
-			}
+				Signature convertedSignature;
+				for( size_t i = 0; const auto & m : rawByteStrings ) {
+					SignatureByte b{ static_cast<uint8_t>( std::stoi( m.substr( 2 ), nullptr, 16 ) ), stringMask[i++] == '?' };
+					convertedSignature.push_back( b );
+				}
 			convertedSignatureString = BuildIDASignatureString( convertedSignature );
 		}
 		else {
@@ -433,21 +429,21 @@ static void SearchSignatureString( std::string input ) {
 			std::vector<std::string> rawByteStrings;
 			// Search for \x00\x11\x22 type arrays
 
-			if( GetRegexMatches( input, std::regex( R"(\\x(?:[0-9A-F]{2}))" ), rawByteStrings ) && rawByteStrings.size( ) > 1 ) {
-				Signature convertedSignature;
-				for( size_t i = 0; const auto & m : rawByteStrings ) {
-					SignatureByte b{ std::stoi( m.substr( 2 ), nullptr, 16 ), false };
-					convertedSignature.push_back( b );
-				}
+				if( GetRegexMatches( input, std::regex( R"(\\x(?:[0-9A-F]{2}))" ), rawByteStrings ) && rawByteStrings.size( ) > 1 ) {
+					Signature convertedSignature;
+					for( const auto & m : rawByteStrings ) {
+						SignatureByte b{ static_cast<uint8_t>( std::stoi( m.substr( 2 ), nullptr, 16 ) ), false };
+						convertedSignature.push_back( b );
+					}
 				convertedSignatureString = BuildIDASignatureString( convertedSignature );
 			}
 			// Search for 0x00, 0x11, 0x22 type arrays
-			else if( GetRegexMatches( input, std::regex( R"((?:0x(?:[0-9A-F]{2}))+)" ), rawByteStrings ) && rawByteStrings.size( ) > 1 ) {
-				Signature convertedSignature;
-				for( size_t i = 0; const auto & m : rawByteStrings ) {
-					SignatureByte b{ std::stoi( m.substr( 2 ), nullptr, 16 ), false };
-					convertedSignature.push_back( b );
-				}
+				else if( GetRegexMatches( input, std::regex( R"((?:0x(?:[0-9A-F]{2}))+)" ), rawByteStrings ) && rawByteStrings.size( ) > 1 ) {
+					Signature convertedSignature;
+					for( const auto & m : rawByteStrings ) {
+						SignatureByte b{ static_cast<uint8_t>( std::stoi( m.substr( 2 ), nullptr, 16 ) ), false };
+						convertedSignature.push_back( b );
+					}
 				convertedSignatureString = BuildIDASignatureString( convertedSignature );
 			}
 			else {
@@ -469,7 +465,7 @@ static void SearchSignatureString( std::string input ) {
 		return;
 	}
 	for( const auto& ea : signatureMatches ) {
-		msg( "Match @ %I64X\n", ea );
+		msg( "Match @ %llX\n", static_cast<unsigned long long>( ea ) );
 	}
 }
 
