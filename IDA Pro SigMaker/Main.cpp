@@ -594,3 +594,44 @@ bool idaapi plugin_ctx_t::run( size_t ) {
 	}
 	return true;
 }
+
+#if defined(_WIN32)
+#define SIGMAKER_C_API extern "C" __declspec( dllexport )
+#else
+#define SIGMAKER_C_API extern "C"
+#endif
+
+SIGMAKER_C_API bool sigmaker_generate( uint64_t ea, int sig_type, char* out_buf, size_t buf_size ) {
+	if( !out_buf || buf_size == 0 ) {
+		return false;
+	}
+
+	const auto writeOutput = [out_buf, buf_size]( const std::string& text ) {
+		qstrncpy( out_buf, text.c_str( ), buf_size );
+	};
+
+	constexpr auto maxSignatureType = static_cast<int>( SignatureType::SignatureByteArray_Bitmask );
+	if( sig_type < 0 || sig_type > maxSignatureType ) {
+		writeOutput( "Invalid signature type" );
+		return false;
+	}
+
+	IS_ARM = IsARM( );
+
+	constexpr bool askLongerSignature = false;
+	const auto signature = GenerateUniqueSignatureForEA(
+		static_cast<ea_t>( ea ),
+		true,
+		false,
+		WildcardableOperandTypeBitmask,
+		1000,
+		askLongerSignature );
+
+	if( !signature.has_value( ) ) {
+		writeOutput( signature.error( ) );
+		return false;
+	}
+
+	writeOutput( FormatSignature( signature.value( ), static_cast<SignatureType>( sig_type ) ) );
+	return true;
+}

@@ -108,7 +108,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   endif()
 
   target_link_libraries(sigmaker PRIVATE "${IDA_LIBRARY}")
-  target_link_options(sigmaker PRIVATE "-Wl,-exported_symbol,_PLUGIN")
+  target_link_options(sigmaker PRIVATE
+    "-Wl,-exported_symbol,_PLUGIN"
+    "-Wl,-exported_symbol,_sigmaker_generate"
+  )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   target_compile_definitions(sigmaker PRIVATE __NT__ __EA64__)
   find_library(IDA_LIBRARY
@@ -125,5 +128,5 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
   endif()
 
   target_link_libraries(sigmaker PRIVATE "${IDA_LIBRARY}")
-  target_link_options(sigmaker PRIVATE /EXPORT:PLUGIN)
+  target_link_options(sigmaker PRIVATE /EXPORT:PLUGIN /EXPORT:sigmaker_generate)
 endif()
